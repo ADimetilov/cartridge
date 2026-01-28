@@ -2,7 +2,7 @@ import psycopg2
 import uvicorn
 from datetime import datetime
 from fastapi import FastAPI, status
-from classes import Cartridge, Cartridge_upload
+from classes import Cartridge, Cartridge_upload,Cartridge_add,Cartridge_edit
 conn = psycopg2.connect(dbname="cartridge",user="postgres",password="123qweR%",host = "localhost",port="5432")
 
 cursor = conn.cursor()
@@ -11,6 +11,89 @@ app = FastAPI()
 @app.get("/status", tags=['deveop'])
 def check_status():
     return status.HTTP_200_OK
+
+@app.get("/anal/get")
+def get_analitics_get(id:int,date1:str,date2:str):
+    try:
+        if (id == 112200):
+            cursor.execute(f'''BEGIN TRANSACTION;
+                       SELECT "Value","Date" from public."cartridge_log" where "Value" = 1;''')
+        else:
+            cursor.execute(f'''BEGIN TRANSACTION; SELECT "Name" from public."cartridge" where "ID" = {id};''')
+            model = str(cursor.fetchone()[0])
+            cursor.execute(f'''BEGIN TRANSACTION;
+                       SELECT "Value","Date" from public."cartridge_log" where "Model" = '{model}' and "Value" = 1;''')
+        list_analit = cursor.fetchall()
+        score=0
+        for analit in list_analit:
+            if (datetime.strptime(date1,"%Y-%m-%d") <= datetime.strptime(str(analit[1]),"%Y-%m-%d")) and (datetime.strptime(date2,"%Y-%m-%d") >= datetime.strptime(str(analit[1]),"%Y-%m-%d")):
+                score += analit[0]
+        return score
+    except Exception as Error:
+        cursor.execute("ROLLBACK;")
+        return str(Error)
+
+@app.get("/anal/post")
+def get_analitics_post(id:int,date1:str,date2:str):
+    try:
+        if (id == 112200):
+            cursor.execute(f'''BEGIN TRANSACTION;
+                       SELECT "Value","Date" from public."cartridge_log" where "Value" = -1;''')
+        else:
+            cursor.execute(f'''BEGIN TRANSACTION; SELECT "Name" from public."cartridge" where "ID" = {id};''')
+            model = str(cursor.fetchone()[0])
+            cursor.execute(f'''BEGIN TRANSACTION;
+                       SELECT "Value","Date" from public."cartridge_log" where "Model" = '{model}' and "Value" = -1;''')
+        list_analit = cursor.fetchall()
+        score=0
+        for analit in list_analit:
+            if (datetime.strptime(date1,"%Y-%m-%d") <= datetime.strptime(str(analit[1]),"%Y-%m-%d")) and (datetime.strptime(date2,"%Y-%m-%d") >= datetime.strptime(str(analit[1]),"%Y-%m-%d")):
+                score += 1
+        return score
+    except Exception as Error:
+        cursor.execute("ROLLBACK;")
+        return str(Error)
+
+
+@app.post("/cart/add")
+def add_cart(cartridge:Cartridge_add):
+    try:
+        cursor.execute(f'''BEGIN TRANSACTION; INSERT INTO public."cartridge" (\"Name\", \"Value\") VALUES(\'{cartridge.name}\',0); COMMIT;''')
+        return status.HTTP_202_ACCEPTED
+    except Exception as Error:
+        cursor.execute("ROLLBACK;")
+        return{
+            'error': str(Error),
+            'status': status.HTTP_400_BAD_REQUEST
+        }
+
+@app.put("/cart/edit")
+def edit_cart(cartridge:Cartridge_edit):
+    try:
+        cursor.execute(f'''BEGIN TRANSACTION;
+                       UPDATE public."cartridge" 
+                       Set "Name" = '{cartridge.name}' 
+                       WHERE "ID" = {cartridge.id};
+                       COMMIT;''')
+        return status.HTTP_202_ACCEPTED
+    except Exception as Error:
+        cursor.execute("ROLLBACK;")
+        return{
+            'error': str(Error),
+            'status': status.HTTP_400_BAD_REQUEST
+        }
+    
+@app.delete("/cart/del")
+def del_cart(id:int):
+    try:
+        cursor.execute(f'''BEGIN TRANSACTION; DELETE FROM public."cartridge" WHERE "ID" = {id};COMMIT;''')
+        return status.HTTP_202_ACCEPTED
+    except Exception as Error:
+        cursor.execute("ROLLBACK;")
+        return{
+            'error': str(Error),
+            'status': status.HTTP_400_BAD_REQUEST
+        }
 
 @app.post("/cart/change")
 def add_value(cart:Cartridge):
@@ -24,8 +107,15 @@ def add_value(cart:Cartridge):
                        "Value" = {value}
                        WHERE "ID" = {cart.id};
                        COMMIT;''')
+        cursor.execute(f'''BEGIN TRANSACTION; SELECT "Name" from public."cartridge" where "ID" = {cart.id};''')
+        model = str(cursor.fetchone()[0])
+        cursor.execute(f'''BEGIN TRANSACTION;
+                            INSERT INTO public."cartridge_log" (\"Model\",\"Date\",\"Value\")
+                            VALUES ('{model}','{datetime.now().strftime("%Y-%m-%d")}',{int(cart.value)});
+                            COMMIT;''')
         return status.HTTP_202_ACCEPTED
     except Exception as Error:
+        cursor.execute("ROLLBACK;")
         return{
             'error': str(Error),
             'status': status.HTTP_400_BAD_REQUEST
@@ -51,6 +141,7 @@ def get_all_cartridge():
             cart_list.append(cart_json)
         return cart_list
     except Exception as error:
+        cursor.execute("ROLLBACK;")
         return {
             "error": str(error),
             "status":status.HTTP_400_BAD_REQUEST
@@ -66,6 +157,7 @@ def upload_add(cart:Cartridge_upload):
                             VALUES ('{model}','{datetime.now().strftime("%Y-%m-%d")}','{cart.adres}','{cart.serial}');
                             COMMIT;''')
     except Exception as error:
+        cursor.execute("ROLLBACK;")
         return {
             "error": str(error),
             "status":status.HTTP_400_BAD_REQUEST
@@ -92,6 +184,7 @@ def get_all_upload():
             upload_list.append(cart_json)
         return upload_list
     except Exception as error:
+        cursor.execute("ROLLBACK;")
         return{
             "error": str(error),
             "status":status.HTTP_400_BAD_REQUEST
@@ -105,6 +198,7 @@ def del_all_upload():
                        COMMIT;''')
         return status.HTTP_200_OK
     except Exception as error:
+        cursor.execute("ROLLBACK;")
         return{
             "error": str(error),
             "status":status.HTTP_400_BAD_REQUEST

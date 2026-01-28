@@ -10,3 +10,16 @@ class Cartridge_upload(BaseModel):
     value:int
     serial:str
     adres:str
+
+class Cartridge_add(BaseModel):
+    name:str
+
+class Cartridge_edit(BaseModel):
+    id:int
+    name:str
+
+class Anal_config(BaseModel):
+    id:int
+    date1:str
+    date2:str
+
