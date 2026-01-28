@@ -151,7 +151,9 @@ def get_all_cartridge():
 def upload_add(cart:Cartridge_upload):
     try:
         cursor.execute(f'''BEGIN TRANSACTION; SELECT "Name" from public."cartridge" where "ID" = {cart.id};''')
-        model = str(cursor.fetchone()[0])
+        model = str(cursor.fetchone()[0]).strip()
+        if (cart.dram == 1):
+            model = model+" (Драм.)"
         cursor.execute(f'''BEGIN TRANSACTION;
                             INSERT INTO public."catridge_exit" (\"model\",\"date\",\"adres\",\"serial\")
                             VALUES ('{model}','{datetime.now().strftime("%Y-%m-%d")}','{cart.adres}','{cart.serial}');

@@ -10,6 +10,7 @@ class Cartridge_upload(BaseModel):
     value:int
     serial:str
     adres:str
+    dram:int
 
 class Cartridge_add(BaseModel):
     name:str
