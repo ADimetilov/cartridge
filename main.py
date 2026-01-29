@@ -174,17 +174,33 @@ def get_all_upload():
         upload_list = []
         for cart in upload_base:
             cart_json = {
+                "id":int,
                 "model":str,
                 "serial":str,
                 "adres":str,
                 "date":str
            }
+            cart_json["id"]=int(cart[0])
             cart_json["model"]=str(cart[1]).strip()
             cart_json["serial"]=str(cart[2]).strip()
             cart_json["adres"]=str(cart[3]).strip()
             cart_json["date"]=str(cart[4]).strip()
             upload_list.append(cart_json)
         return upload_list
+    except Exception as error:
+        cursor.execute("ROLLBACK;")
+        return{
+            "error": str(error),
+            "status":status.HTTP_400_BAD_REQUEST
+        }
+    
+@app.delete("/upload/delid")
+def del_for_id_upload(id:int):
+    try:
+        cursor.execute(f'''BEGIN TRANSACTION;
+                       DELETE FROM PUBLIC."catridge_exit" WHERE "id" = {id}; 
+                       COMMIT;''')
+        return status.HTTP_200_OK
     except Exception as error:
         cursor.execute("ROLLBACK;")
         return{
