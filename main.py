@@ -2,11 +2,19 @@ import psycopg2
 import uvicorn
 from datetime import datetime
 from fastapi import FastAPI, status
-from classes import Cartridge, Cartridge_upload,Cartridge_add,Cartridge_edit
+from starlette.middleware.cors import CORSMiddleware
+from classes import *
 conn = psycopg2.connect(dbname="cartridge",user="postgres",password="123qweR%",host = "localhost",port="5432")
 
 cursor = conn.cursor()
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # или укажите конкретный домен: ["http://localhost:3000"]
+    allow_credentials=True,
+    allow_methods=["*"],      # разрешаем все методы (GET, POST и др.)
+    allow_headers=["*"],     # разрешаем все заголовки
+)
 
 @app.get("/status", tags=['deveop'])
 def check_status():
@@ -150,13 +158,11 @@ def get_all_cartridge():
 @app.post("/upload/add")
 def upload_add(cart:Cartridge_upload):
     try:
-        cursor.execute(f'''BEGIN TRANSACTION; SELECT "Name" from public."cartridge" where "ID" = {cart.id};''')
-        model = str(cursor.fetchone()[0]).strip()
         if (cart.dram == 1):
-            model = model+" (Драм.)"
+            cart.model = cart.model+" (Драм.)"
         cursor.execute(f'''BEGIN TRANSACTION;
                             INSERT INTO public."catridge_exit" (\"model\",\"date\",\"adres\",\"serial\")
-                            VALUES ('{model}','{datetime.now().strftime("%Y-%m-%d")}','{cart.adres}','{cart.serial}');
+                            VALUES ('{cart.model}','{datetime.now().strftime("%Y-%m-%d")}','{cart.adres}','{cart.serial}');
                             COMMIT;''')
     except Exception as error:
         cursor.execute("ROLLBACK;")
@@ -220,6 +226,128 @@ def del_all_upload():
         return{
             "error": str(error),
             "status":status.HTTP_400_BAD_REQUEST
+        }
+
+@app.post("/model/create")
+def create_model(model:Model_New):
+    try:
+        cursor.execute(f'''BEGIN TRANSACTION;
+                       INSERT INTO public."model" (\"name\")
+                       VALUES ('{model.name}');
+                       COMMIT;''')
+        return status.HTTP_200_OK
+    except Exception as error:
+        cursor.execute("ROLLBACK;")
+        return{
+            'status': status.HTTP_400_BAD_REQUEST,
+            'error_text':str(error)
+        }
+    
+@app.get("/model/list")
+def get_all_model():
+    try:
+        cursor.execute(f'''BEGIN TRANSACTION;
+                       SELECT * FROM public."model" ORDER BY "id" ASC;''')
+        model_base = cursor.fetchall()
+        model_list = []
+        for model in model_base:
+            model_json = {
+                "id":int,
+                "name":str,
+            }
+            model_json["id"] = model[0]
+            model_json["name"] = str(model[1]).strip()
+            model_list.append(model_json)
+        return model_list
+    except Exception as error:
+        cursor.execute("ROLLBACK;")
+        return{
+            'status': status.HTTP_400_BAD_REQUEST,
+            'error_text':str(error)
+        }
+
+@app.get("/model/get")
+def get_model_for_cart(id:int):
+    try:
+        cursor.execute(f'''BEGIN TRANSACTION;
+                       SELECT id, (Select "name" from public."model" where "id" = "id_model") FROM public."cartridge_model" WHERE "id_cart" ={id} ORDER BY "id" ASC;''')
+        model_base = cursor.fetchall()
+        model_list = []
+        for model in model_base:
+            model_json = {
+                "id":int,
+                "name":str,
+            }
+            model_json["id"] = model[0]
+            model_json["name"] = str(model[1]).strip()
+            model_list.append(model_json)
+        return model_list
+    except Exception as error:
+        cursor.execute("ROLLBACK;")
+        return{
+            'status': status.HTTP_400_BAD_REQUEST,
+            'error_text':str(error)
+        }
+
+
+@app.put("/model/edit")
+def edit_model(model:Model_Edit):
+    try:
+        cursor.execute(f'''BEGIN TRANSACTION;
+                       UPDATE public."model" set \"name\" = '{model.name}'
+                       WHERE "id" = {model.id};
+                       COMMIT;''')
+        return status.HTTP_200_OK
+    except Exception as error:
+        cursor.execute("ROLLBACK;")
+        return{
+            'status': status.HTTP_400_BAD_REQUEST,
+            'error_text':str(error)
+        }
+    
+@app.delete("/model/delete")
+def delete_model(id:int):
+    try:
+        cursor.execute(f'''BEGIN TRANSACTION;
+                       DELETE * FROM public."model" where "id" = {id};
+                       COMMIT;''')
+        return status.HTTP_201_CREATED
+    except Exception as error:
+        cursor.execute("ROLLBACK;")
+        return{
+            'status': status.HTTP_400_BAD_REQUEST,
+            'error_text':str(error)
+        }
+    
+@app.post("/model/link")
+def link_model_cart(data:Model_link):
+    try:
+        for model_id in data.id_model:
+            cursor.execute(f'''BEGIN TRANSACTION;
+                        insert into public."cartridge_model" (\"id_model\",\"id_cart\")
+                        VALUES({int(model_id)},{data.id_cart});
+                        COMMIT;''')
+        return status.HTTP_201_CREATED
+    except Exception as error:
+        cursor.execute("ROLLBACK;")
+        return{
+            'status': status.HTTP_400_BAD_REQUEST,
+            'error_text':str(error)
+        }
+    
+@app.delete("/model/unlink")
+def link_model_cart(id:int):
+    try:
+        cursor.execute(f'''BEGIN TRANSACTION;
+                       delete from public."cartridge_model"
+                       where "id_cart" = {id};
+                       COMMIT;''')
+        return status.HTTP_200_OK
+    except Exception as error:
+        cursor.execute("ROLLBACK;")
+        return{
+            'status': status.HTTP_400_BAD_REQUEST,
+            'error_text':str(error)
         }
 
 if __name__ == "__main__":
