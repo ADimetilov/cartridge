@@ -94,7 +94,11 @@ def edit_cart(cartridge:Cartridge_edit):
 @app.delete("/cart/del")
 def del_cart(id:int):
     try:
-        cursor.execute(f'''BEGIN TRANSACTION; DELETE FROM public."cartridge" WHERE "ID" = {id};COMMIT;''')
+        cursor.execute(f'''BEGIN TRANSACTION; 
+                       DELETE FROM public."cartridge_model" where "id_cart" = {id};
+                       DELETE FROM public."cartridge" WHERE "ID" = {id};
+                       COMMIT;
+                       ''')
         return status.HTTP_202_ACCEPTED
     except Exception as Error:
         cursor.execute("ROLLBACK;")
@@ -254,9 +258,11 @@ def get_all_model():
             model_json = {
                 "id":int,
                 "name":str,
+                "model_id":int
             }
             model_json["id"] = model[0]
             model_json["name"] = str(model[1]).strip()
+            model_json["model_id"] = model[0]
             model_list.append(model_json)
         return model_list
     except Exception as error:
@@ -270,16 +276,18 @@ def get_all_model():
 def get_model_for_cart(id:int):
     try:
         cursor.execute(f'''BEGIN TRANSACTION;
-                       SELECT id, (Select "name" from public."model" where "id" = "id_model") FROM public."cartridge_model" WHERE "id_cart" ={id} ORDER BY "id" ASC;''')
+                       SELECT id, id_model, (Select "name" from public."model" where "id" = "id_model") FROM public."cartridge_model" WHERE "id_cart" ={id} ORDER BY "id" ASC;''')
         model_base = cursor.fetchall()
         model_list = []
         for model in model_base:
             model_json = {
                 "id":int,
-                "name":str,
+                "model_id":int,
+                "name":str
             }
             model_json["id"] = model[0]
-            model_json["name"] = str(model[1]).strip()
+            model_json["model_id"] = model[1]
+            model_json["name"] = str(model[2]).strip()
             model_list.append(model_json)
         return model_list
     except Exception as error:
@@ -309,7 +317,8 @@ def edit_model(model:Model_Edit):
 def delete_model(id:int):
     try:
         cursor.execute(f'''BEGIN TRANSACTION;
-                       DELETE * FROM public."model" where "id" = {id};
+                       DELETE FROM public."cartridge_model" where "id_model" = {id};
+                       DELETE FROM public."model" where "id" = {id};
                        COMMIT;''')
         return status.HTTP_201_CREATED
     except Exception as error:
