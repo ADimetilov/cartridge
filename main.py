@@ -5,7 +5,7 @@ from datetime import datetime,timedelta
 from fastapi import FastAPI, status
 from starlette.middleware.cors import CORSMiddleware
 from classes import *
-conn = psycopg2.connect(dbname="cartridge",user="postgres",password="123qweR%",host = "localhost",port="5432")
+conn = psycopg2.connect(dbname="cartridge",user="postgres",password="123qweR%",host = "10.4.16.41",port="5555")
 
 cursor = conn.cursor()
 app = FastAPI()
