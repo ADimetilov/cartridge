@@ -1,6 +1,7 @@
 import psycopg2
 import uvicorn
-from datetime import datetime
+from datetime import date
+from datetime import datetime,timedelta
 from fastapi import FastAPI, status
 from starlette.middleware.cors import CORSMiddleware
 from classes import *
@@ -10,10 +11,10 @@ cursor = conn.cursor()
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # или укажите конкретный домен: ["http://localhost:3000"]
+    allow_origins=["*"],  
     allow_credentials=True,
-    allow_methods=["*"],      # разрешаем все методы (GET, POST и др.)
-    allow_headers=["*"],     # разрешаем все заголовки
+    allow_methods=["*"],      
+    allow_headers=["*"], 
 )
 
 @app.get("/status", tags=['deveop'])
@@ -162,8 +163,6 @@ def get_all_cartridge():
 @app.post("/upload/add")
 def upload_add(cart:Cartridge_upload):
     try:
-        if (cart.dram == 1):
-            cart.model = cart.model+" (Драм.)"
         cursor.execute(f'''BEGIN TRANSACTION;
                             INSERT INTO public."catridge_exit" (\"model\",\"date\",\"adres\",\"serial\")
                             VALUES ('{cart.model}','{datetime.now().strftime("%Y-%m-%d")}','{cart.adres}','{cart.serial}');
@@ -178,6 +177,9 @@ def upload_add(cart:Cartridge_upload):
 @app.get("/upload/all")
 def get_all_upload():
     try:
+        datenow = date.today()
+        while (datenow.isoweekday()!=2 and datenow.isoweekday()!=4):
+            datenow = datenow + timedelta(days=1)
         cursor.execute(f'''BEGIN TRANSACTION;
                        SELECT * from public."catridge_exit" ORDER BY id DESC;''')
         upload_base = cursor.fetchall()
@@ -194,7 +196,7 @@ def get_all_upload():
             cart_json["model"]=str(cart[1]).strip()
             cart_json["serial"]=str(cart[2]).strip()
             cart_json["adres"]=str(cart[3]).strip()
-            cart_json["date"]=str(cart[4]).strip()
+            cart_json["date"]=str(datenow).strip()
             upload_list.append(cart_json)
         return upload_list
     except Exception as error:
@@ -350,6 +352,75 @@ def link_model_cart(id:int):
         cursor.execute(f'''BEGIN TRANSACTION;
                        delete from public."cartridge_model"
                        where "id_cart" = {id};
+                       COMMIT;''')
+        return status.HTTP_200_OK
+    except Exception as error:
+        cursor.execute("ROLLBACK;")
+        return{
+            'status': status.HTTP_400_BAD_REQUEST,
+            'error_text':str(error)
+        }
+    
+@app.post("/requirement/add")
+def add_requirement(requirement:Requirement):
+    try:
+        cursor.execute(f'''BEGIN TRANSACTION;
+                       Insert into public."requirement" (\"id_model\",\"score\")
+                       VALUES({requirement.id_model},{requirement.score});
+                       COMMIT;''')
+    except Exception as error:
+        cursor.execute("ROLLBACK;")
+        return{
+            'status': status.HTTP_400_BAD_REQUEST,
+            'error_text':str(error)
+        }
+    
+@app.get("/requirement/all")
+def get_all_requirement():
+    try:
+        cursor.execute(f'''BEGIN TRANSACTION;
+                       SELECT "id", (Select "name" from public."model" where "id" = "id_model") as name, "score"
+                       from public."requirement"
+                       ORDER BY "id" ASC;''')
+        list_requirement = cursor.fetchall()
+        list_json_requirement = []
+        for requirement in list_requirement:
+            json_requirement = {
+                "id":int,
+                "name":str,
+                "score":int
+            }
+            json_requirement["id"]=int(requirement[0])
+            json_requirement["name"] = str(requirement[1]).strip()
+            json_requirement["score"] = int(requirement[2])
+            list_json_requirement.append(json_requirement)
+        return list_json_requirement
+    except Exception as error:
+        cursor.execute("ROLLBACK;")
+        return{
+            'status': status.HTTP_400_BAD_REQUEST,
+            'error_text':str(error)
+        }
+    
+@app.put("/requirement/edit")
+def edit_requirement_for_id(requirement:Requirement_edit):
+    try:
+        cursor.execute(f'''UPDATE public."requirement" SET \"score\" = {requirement.score}
+                       WHERE "id" = {requirement.id};
+                       COMMIT;''')
+        return status.HTTP_200_OK
+    except Exception as error:
+        cursor.execute("ROLLBACK;")
+        return{
+            'status': status.HTTP_400_BAD_REQUEST,
+            'error_text':str(error)
+        }
+
+@app.delete("/requirement/delete")
+def delete_requirement_for_id(id:int):
+    try:
+        cursor.execute(f'''BEGIN TRANSACTION;
+                       DELETE FROM PUBLIC."requirement" WHERE "id" = {id};
                        COMMIT;''')
         return status.HTTP_200_OK
     except Exception as error:

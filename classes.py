@@ -10,7 +10,6 @@ class Cartridge_upload(BaseModel):
     value:int
     serial:str
     adres:str
-    dram:int
 
 class Cartridge_add(BaseModel):
     name:str
@@ -34,3 +33,11 @@ class Model_Edit(BaseModel):
 class Model_link(BaseModel):
     id_model:list
     id_cart:int
+
+class Requirement(BaseModel):
+    id_model:int
+    score:int
+
+class Requirement_edit(BaseModel):
+    id:int
+    score:int
