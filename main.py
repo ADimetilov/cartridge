@@ -6,15 +6,11 @@ from fastapi import FastAPI, status
 import logging
 from starlette.middleware.cors import CORSMiddleware
 from classes import *
-<<<<<<< HEAD
-conn = psycopg2.connect(dbname="cartridge",user="postgres",password="123qweR%",host = "10.4.16.41",port="5555")
-=======
 conn = psycopg2.connect(dbname="cartridge",user="postgres",password="123qweR%",host = "10.4.16.7",port="5432")
 
 filename = "log_info_" + datetime.now().strftime("%d_%m_%Y_%H_%M_%S")+".log"
 logging.basicConfig(level=logging.INFO,filename=filename,filemode="w",format="%(asctime)s %(levelname)s %(message)s")
 logging.info("Start")
->>>>>>> develop
 
 cursor = conn.cursor()
 app = FastAPI()
