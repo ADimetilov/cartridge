@@ -3,9 +3,18 @@ import uvicorn
 from datetime import date
 from datetime import datetime,timedelta
 from fastapi import FastAPI, status
+import logging
 from starlette.middleware.cors import CORSMiddleware
 from classes import *
+<<<<<<< HEAD
 conn = psycopg2.connect(dbname="cartridge",user="postgres",password="123qweR%",host = "10.4.16.41",port="5555")
+=======
+conn = psycopg2.connect(dbname="cartridge",user="postgres",password="123qweR%",host = "10.4.16.7",port="5432")
+
+filename = "log_info_" + datetime.now().strftime("%d_%m_%Y_%H_%M_%S")+".log"
+logging.basicConfig(level=logging.INFO,filename=filename,filemode="w",format="%(asctime)s %(levelname)s %(message)s")
+logging.info("Start")
+>>>>>>> develop
 
 cursor = conn.cursor()
 app = FastAPI()
@@ -19,11 +28,13 @@ app.add_middleware(
 
 @app.get("/status", tags=['deveop'])
 def check_status():
+    logging.info(f"Проверка доступности сервера!")
     return status.HTTP_200_OK
 
 @app.get("/anal/get")
 def get_analitics_get(id:int,date1:str,date2:str):
     try:
+        logging.info(f"Начал получение аналитики по приёму")
         if (id == 112200):
             cursor.execute(f'''BEGIN TRANSACTION;
                        SELECT "Value","Date" from public."cartridge_log" where "Value" = 1;''')
@@ -37,14 +48,17 @@ def get_analitics_get(id:int,date1:str,date2:str):
         for analit in list_analit:
             if (datetime.strptime(date1,"%Y-%m-%d") <= datetime.strptime(str(analit[1]),"%Y-%m-%d")) and (datetime.strptime(date2,"%Y-%m-%d") >= datetime.strptime(str(analit[1]),"%Y-%m-%d")):
                 score += analit[0]
+        logging.info(f"Аналитика по получениям получена")
         return score
     except Exception as Error:
         cursor.execute("ROLLBACK;")
+        logging.error(str(Error))
         return str(Error)
 
 @app.get("/anal/post")
 def get_analitics_post(id:int,date1:str,date2:str):
     try:
+        logging.info(f"Начал получение аналитики по отправкам")
         if (id == 112200):
             cursor.execute(f'''BEGIN TRANSACTION;
                        SELECT "Value","Date" from public."cartridge_log" where "Value" = -1;''')
@@ -58,19 +72,24 @@ def get_analitics_post(id:int,date1:str,date2:str):
         for analit in list_analit:
             if (datetime.strptime(date1,"%Y-%m-%d") <= datetime.strptime(str(analit[1]),"%Y-%m-%d")) and (datetime.strptime(date2,"%Y-%m-%d") >= datetime.strptime(str(analit[1]),"%Y-%m-%d")):
                 score += 1
+        logging.info(f"Аналитика по отправкам получена")
         return score
     except Exception as Error:
         cursor.execute("ROLLBACK;")
+        logging.error(str(Error))
         return str(Error)
 
 
 @app.post("/cart/add")
 def add_cart(cartridge:Cartridge_add):
     try:
+        logging.info(f"Начал добавление картриджа {cartridge.name}")
         cursor.execute(f'''BEGIN TRANSACTION; INSERT INTO public."cartridge" (\"Name\", \"Value\") VALUES(\'{cartridge.name}\',0); COMMIT;''')
+        logging.info(f"Добавил картридж {cartridge.name}")
         return status.HTTP_202_ACCEPTED
     except Exception as Error:
         cursor.execute("ROLLBACK;")
+        logging.error(str(Error))
         return{
             'error': str(Error),
             'status': status.HTTP_400_BAD_REQUEST
@@ -79,13 +98,16 @@ def add_cart(cartridge:Cartridge_add):
 @app.put("/cart/edit")
 def edit_cart(cartridge:Cartridge_edit):
     try:
+        logging.info(f"Начал изменение картриджа {cartridge.id} на {cartridge.name}")
         cursor.execute(f'''BEGIN TRANSACTION;
                        UPDATE public."cartridge" 
                        Set "Name" = '{cartridge.name}' 
                        WHERE "ID" = {cartridge.id};
                        COMMIT;''')
+        logging.info(f"Изменил наименование картриджа {cartridge.id} на {cartridge.name}")
         return status.HTTP_202_ACCEPTED
     except Exception as Error:
+        logging.error(str(Error))
         cursor.execute("ROLLBACK;")
         return{
             'error': str(Error),
@@ -95,13 +117,16 @@ def edit_cart(cartridge:Cartridge_edit):
 @app.delete("/cart/del")
 def del_cart(id:int):
     try:
+        logging.info(f"Начал удаление картриджа {id}")
         cursor.execute(f'''BEGIN TRANSACTION; 
                        DELETE FROM public."cartridge_model" where "id_cart" = {id};
                        DELETE FROM public."cartridge" WHERE "ID" = {id};
                        COMMIT;
                        ''')
+        logging.info(f"Картридж {id} удалён")
         return status.HTTP_202_ACCEPTED
     except Exception as Error:
+        logging.error(str(Error))
         cursor.execute("ROLLBACK;")
         return{
             'error': str(Error),
@@ -111,6 +136,7 @@ def del_cart(id:int):
 @app.post("/cart/change")
 def add_value(cart:Cartridge):
     try:
+        logging.info(f"Начал изменение картриджа {cart.id} на {cart.value}")
         cursor.execute(f'''BEGIN TRANSACTION; SELECT "Value" from public."cartridge" WHERE "ID" = {cart.id} ;''')
         value = int(cursor.fetchone()[0])
         value+=cart.value
@@ -126,8 +152,10 @@ def add_value(cart:Cartridge):
                             INSERT INTO public."cartridge_log" (\"Model\",\"Date\",\"Value\")
                             VALUES ('{model}','{datetime.now().strftime("%Y-%m-%d")}',{int(cart.value)});
                             COMMIT;''')
+        logging.info(f"Успешно измененил значение {cart.id}")
         return status.HTTP_202_ACCEPTED
     except Exception as Error:
+        logging.error(str(Error))
         cursor.execute("ROLLBACK;")
         return{
             'error': str(Error),
@@ -138,6 +166,7 @@ def add_value(cart:Cartridge):
 @app.get("/cart/all")
 def get_all_cartridge():
     try:
+        logging.info("Начал загружать список картриджей!")
         cursor.execute(f'''BEGIN TRANSACTION;
                        SELECT * FROM public."cartridge" ORDER BY "ID" ASC;''')
         cart_base = cursor.fetchall()
@@ -152,8 +181,10 @@ def get_all_cartridge():
             cart_json["name"] = str(cart[1]).strip()
             cart_json["value"] = int(cart[2])
             cart_list.append(cart_json)
+        logging.info("Список наличия картриджей выгружен!")
         return cart_list
     except Exception as error:
+        logging.error(str(error))
         cursor.execute("ROLLBACK;")
         return {
             "error": str(error),
@@ -163,11 +194,15 @@ def get_all_cartridge():
 @app.post("/upload/add")
 def upload_add(cart:Cartridge_upload):
     try:
+        logging.info(f"Начал добавлять картридж на выгрузку!")
         cursor.execute(f'''BEGIN TRANSACTION;
                             INSERT INTO public."catridge_exit" (\"model\",\"date\",\"adres\",\"serial\")
                             VALUES ('{cart.model}','{datetime.now().strftime("%Y-%m-%d")}','{cart.adres}','{cart.serial}');
                             COMMIT;''')
+        logging.info("Добавил картридж на выгрузку!")
+        return status.HTTP_202_ACCEPTED
     except Exception as error:
+        logging.error(str(error))
         cursor.execute("ROLLBACK;")
         return {
             "error": str(error),
@@ -177,6 +212,7 @@ def upload_add(cart:Cartridge_upload):
 @app.get("/upload/all")
 def get_all_upload():
     try:
+        logging.info(f"Начал получать все картриджи на выгрузку!")
         datenow = date.today()
         while (datenow.isoweekday()!=2 and datenow.isoweekday()!=4):
             datenow = datenow + timedelta(days=1)
@@ -198,8 +234,10 @@ def get_all_upload():
             cart_json["adres"]=str(cart[3]).strip()
             cart_json["date"]=str(datenow).strip()
             upload_list.append(cart_json)
+        logging.info(f"Список картриджей выгружен!")
         return upload_list
     except Exception as error:
+        logging.error(str(error))
         cursor.execute("ROLLBACK;")
         return{
             "error": str(error),
@@ -209,11 +247,14 @@ def get_all_upload():
 @app.delete("/upload/delid")
 def del_for_id_upload(id:int):
     try:
+        logging.info(f"Начал картридж по идентификатору {id} из выгрузки!")
         cursor.execute(f'''BEGIN TRANSACTION;
                        DELETE FROM PUBLIC."catridge_exit" WHERE "id" = {id}; 
                        COMMIT;''')
+        logging.info(f"Картридж по идентификатору {id} из выгрузки удален!")
         return status.HTTP_200_OK
     except Exception as error:
+        logging.error(str(error))
         cursor.execute("ROLLBACK;")
         return{
             "error": str(error),
@@ -223,11 +264,14 @@ def del_for_id_upload(id:int):
 @app.delete("/upload/del")
 def del_all_upload():
     try:
+        logging.info("Начал удалять все картриджи из выгрузки!")
         cursor.execute(f'''BEGIN TRANSACTION;
                        DELETE FROM PUBLIC."catridge_exit"; 
                        COMMIT;''')
+        logging.info("Список выгрузки пуст!")
         return status.HTTP_200_OK
     except Exception as error:
+        logging.error(str(error))
         cursor.execute("ROLLBACK;")
         return{
             "error": str(error),
@@ -237,12 +281,15 @@ def del_all_upload():
 @app.post("/model/create")
 def create_model(model:Model_New):
     try:
+        logging.info("Начал добавлять модель!")
         cursor.execute(f'''BEGIN TRANSACTION;
                        INSERT INTO public."model" (\"name\")
                        VALUES ('{model.name}');
                        COMMIT;''')
+        logging.info("Модель добавлена!")
         return status.HTTP_200_OK
     except Exception as error:
+        logging.error(str(error))
         cursor.execute("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
@@ -252,6 +299,7 @@ def create_model(model:Model_New):
 @app.get("/model/list")
 def get_all_model():
     try:
+        logging.info("Начал получать все модели по картриджу!")
         cursor.execute(f'''BEGIN TRANSACTION;
                        SELECT * FROM public."model" ORDER BY "id" ASC;''')
         model_base = cursor.fetchall()
@@ -266,8 +314,10 @@ def get_all_model():
             model_json["name"] = str(model[1]).strip()
             model_json["model_id"] = model[0]
             model_list.append(model_json)
+        logging.info("Модели получены!")
         return model_list
     except Exception as error:
+        logging.error(str(error))
         cursor.execute("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
@@ -277,6 +327,7 @@ def get_all_model():
 @app.get("/model/get")
 def get_model_for_cart(id:int):
     try:
+        logging.info("Начал получать модели по картриджу!")
         cursor.execute(f'''BEGIN TRANSACTION;
                        SELECT id, id_model, (Select "name" from public."model" where "id" = "id_model") FROM public."cartridge_model" WHERE "id_cart" ={id} ORDER BY "id" ASC;''')
         model_base = cursor.fetchall()
@@ -291,8 +342,10 @@ def get_model_for_cart(id:int):
             model_json["model_id"] = model[1]
             model_json["name"] = str(model[2]).strip()
             model_list.append(model_json)
+        logging.info("Модели по картриджу получены!")
         return model_list
     except Exception as error:
+        logging.error(str(error))
         cursor.execute("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
@@ -309,6 +362,7 @@ def edit_model(model:Model_Edit):
                        COMMIT;''')
         return status.HTTP_200_OK
     except Exception as error:
+        logging.error(str(error))
         cursor.execute("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
@@ -324,6 +378,7 @@ def delete_model(id:int):
                        COMMIT;''')
         return status.HTTP_201_CREATED
     except Exception as error:
+        logging.error(str(error))
         cursor.execute("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
@@ -333,13 +388,16 @@ def delete_model(id:int):
 @app.post("/model/link")
 def link_model_cart(data:Model_link):
     try:
+        logging.info("Начал связывать модели и картриджи!")
         for model_id in data.id_model:
             cursor.execute(f'''BEGIN TRANSACTION;
                         insert into public."cartridge_model" (\"id_model\",\"id_cart\")
                         VALUES({int(model_id)},{data.id_cart});
                         COMMIT;''')
+        logging.info("Связал модели и картриджи!")
         return status.HTTP_201_CREATED
     except Exception as error:
+        logging.error(str(error))
         cursor.execute("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
@@ -349,12 +407,15 @@ def link_model_cart(data:Model_link):
 @app.delete("/model/unlink")
 def link_model_cart(id:int):
     try:
+        logging.info("Начал убирать связку!")
         cursor.execute(f'''BEGIN TRANSACTION;
                        delete from public."cartridge_model"
                        where "id_cart" = {id};
                        COMMIT;''')
+        logging.info("Убрал связку!")
         return status.HTTP_200_OK
     except Exception as error:
+        logging.error(str(error))
         cursor.execute("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
@@ -364,11 +425,14 @@ def link_model_cart(id:int):
 @app.post("/requirement/add")
 def add_requirement(requirement:Requirement):
     try:
+        logging.info("Начал добавлять потребность!")
         cursor.execute(f'''BEGIN TRANSACTION;
                        Insert into public."requirement" (\"id_model\",\"score\")
                        VALUES({requirement.id_model},{requirement.score});
                        COMMIT;''')
+        logging.info("Потребность добавлена!")
     except Exception as error:
+        logging.error(str(error))
         cursor.execute("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
@@ -378,6 +442,7 @@ def add_requirement(requirement:Requirement):
 @app.get("/requirement/all")
 def get_all_requirement():
     try:
+        logging.info("Получение всех потребностей начал!")
         cursor.execute(f'''BEGIN TRANSACTION;
                        SELECT "id", (Select "name" from public."model" where "id" = "id_model") as name, "score"
                        from public."requirement"
@@ -394,8 +459,10 @@ def get_all_requirement():
             json_requirement["name"] = str(requirement[1]).strip()
             json_requirement["score"] = int(requirement[2])
             list_json_requirement.append(json_requirement)
+        logging.info("Потребности получил!")
         return list_json_requirement
     except Exception as error:
+        logging.error(str(error))
         cursor.execute("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
@@ -405,11 +472,14 @@ def get_all_requirement():
 @app.put("/requirement/edit")
 def edit_requirement_for_id(requirement:Requirement_edit):
     try:
+        logging.info("Изменение потребности начал!")
         cursor.execute(f'''UPDATE public."requirement" SET \"score\" = {requirement.score}
                        WHERE "id" = {requirement.id};
                        COMMIT;''')
+        logging.info("Потребность изменена!")
         return status.HTTP_200_OK
     except Exception as error:
+        logging.error(str(error))
         cursor.execute("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
@@ -419,11 +489,14 @@ def edit_requirement_for_id(requirement:Requirement_edit):
 @app.delete("/requirement/delete")
 def delete_requirement_for_id(id:int):
     try:
+        logging.info("Удаление потребность начал!")
         cursor.execute(f'''BEGIN TRANSACTION;
                        DELETE FROM PUBLIC."requirement" WHERE "id" = {id};
                        COMMIT;''')
+        logging.info("Потребность удалена!")
         return status.HTTP_200_OK
     except Exception as error:
+        logging.error(str(error))
         cursor.execute("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
