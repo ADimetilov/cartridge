@@ -8,8 +8,14 @@ from starlette.middleware.cors import CORSMiddleware
 from classes import *
 conn = psycopg2.connect(dbname="cartridge",user="postgres",password="123qweR%",host = "10.4.16.7",port="5432")
 
-filename = "log_info_" + datetime.now().strftime("%d_%m_%Y_%H_%M_%S")+".log"
-logging.basicConfig(level=logging.INFO,filename=filename,filemode="w",format="%(asctime)s %(levelname)s %(message)s")
+filename = "log_info_" + datetime.now().strftime("%d_%m_%Y_%H_%S")+".log"
+logging.basicConfig(
+    level=logging.INFO,
+    filename=filename,
+    filemode="a",
+    format="%(asctime)s %(levelname)s %(message)s",
+    force=True   
+)
 logging.info("Start")
 
 cursor = conn.cursor()
