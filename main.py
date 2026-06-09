@@ -6,7 +6,7 @@ from fastapi import FastAPI, status
 import logging
 from starlette.middleware.cors import CORSMiddleware
 from classes import *
-conn = psycopg2.connect(dbname="cartridge",user="postgres",password="123qweR%",host = "10.4.16.7",port="5432")
+conn = psycopg2.connect(dbname="cartridge",user="postgres",password="123qweR%",host = "10.4.16.7",port="5432",keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=5)
 
 filename = "log_info_" + datetime.now().strftime("%d_%m_%Y_%H_%S")+".log"
 logging.basicConfig(
@@ -28,6 +28,30 @@ app.add_middleware(
     allow_headers=["*"], 
 )
 
+def execute_query(query, params=None, fetch=False):
+    global conn, cursor
+    try:
+        # Проверяем, не отвалилось ли соединение
+        if conn.closed != 0:
+            logging.warning("Соединение с БД закрыто, переподключаюсь...")
+            conn = psycopg2.connect(dbname="cartridge", user="postgres", password="123qweR%", host="10.4.16.7", port="5432", keepalives=1, keepalives_idle=30)
+            cursor = conn.cursor()
+            
+        if params:
+            cursor.execute(query, params)
+        else:
+            cursor.execute(query)
+            
+        if fetch:
+            return cursor.fetchall()
+        conn.commit()
+    except psycopg2.OperationalError as e:
+        logging.error(f"OperationalError: {e}. Переподключаюсь...")
+        conn = psycopg2.connect(dbname="cartridge", user="postgres", password="123qweR%", host="10.4.16.7", port="5432", keepalives=1, keepalives_idle=30)
+        cursor = conn.cursor()
+        # Рекурсивно пробуем еще раз
+        return execute_query(query, params, fetch)
+
 @app.get("/status", tags=['deveop'])
 def check_status():
     logging.info(f"Проверка доступности сервера!")
@@ -38,12 +62,12 @@ def get_analitics_get(id:int,date1:str,date2:str):
     try:
         logging.info(f"Начал получение аналитики по приёму")
         if (id == 112200):
-            cursor.execute(f'''BEGIN TRANSACTION;
+            execute_query(f'''BEGIN TRANSACTION;
                        SELECT "Value","Date" from public."cartridge_log" where "Value" = 1;''')
         else:
-            cursor.execute(f'''BEGIN TRANSACTION; SELECT "Name" from public."cartridge" where "ID" = {id};''')
+            execute_query(f'''BEGIN TRANSACTION; SELECT "Name" from public."cartridge" where "ID" = {id};''')
             model = str(cursor.fetchone()[0])
-            cursor.execute(f'''BEGIN TRANSACTION;
+            execute_query(f'''BEGIN TRANSACTION;
                        SELECT "Value","Date" from public."cartridge_log" where "Model" = '{model}' and "Value" = 1;''')
         list_analit = cursor.fetchall()
         score=0
@@ -53,7 +77,7 @@ def get_analitics_get(id:int,date1:str,date2:str):
         logging.info(f"Аналитика по получениям получена")
         return score
     except Exception as Error:
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         logging.error(str(Error))
         return str(Error)
 
@@ -62,12 +86,12 @@ def get_analitics_post(id:int,date1:str,date2:str):
     try:
         logging.info(f"Начал получение аналитики по отправкам")
         if (id == 112200):
-            cursor.execute(f'''BEGIN TRANSACTION;
+            execute_query(f'''BEGIN TRANSACTION;
                        SELECT "Value","Date" from public."cartridge_log" where "Value" = -1;''')
         else:
-            cursor.execute(f'''BEGIN TRANSACTION; SELECT "Name" from public."cartridge" where "ID" = {id};''')
+            execute_query(f'''BEGIN TRANSACTION; SELECT "Name" from public."cartridge" where "ID" = {id};''')
             model = str(cursor.fetchone()[0])
-            cursor.execute(f'''BEGIN TRANSACTION;
+            execute_query(f'''BEGIN TRANSACTION;
                        SELECT "Value","Date" from public."cartridge_log" where "Model" = '{model}' and "Value" = -1;''')
         list_analit = cursor.fetchall()
         score=0
@@ -77,7 +101,7 @@ def get_analitics_post(id:int,date1:str,date2:str):
         logging.info(f"Аналитика по отправкам получена")
         return score
     except Exception as Error:
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         logging.error(str(Error))
         return str(Error)
 
@@ -86,11 +110,11 @@ def get_analitics_post(id:int,date1:str,date2:str):
 def add_cart(cartridge:Cartridge_add):
     try:
         logging.info(f"Начал добавление картриджа {cartridge.name}")
-        cursor.execute(f'''BEGIN TRANSACTION; INSERT INTO public."cartridge" (\"Name\", \"Value\") VALUES(\'{cartridge.name}\',0); COMMIT;''')
+        execute_query(f'''BEGIN TRANSACTION; INSERT INTO public."cartridge" (\"Name\", \"Value\") VALUES(\'{cartridge.name}\',0); COMMIT;''')
         logging.info(f"Добавил картридж {cartridge.name}")
         return status.HTTP_202_ACCEPTED
     except Exception as Error:
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         logging.error(str(Error))
         return{
             'error': str(Error),
@@ -101,7 +125,7 @@ def add_cart(cartridge:Cartridge_add):
 def edit_cart(cartridge:Cartridge_edit):
     try:
         logging.info(f"Начал изменение картриджа {cartridge.id} на {cartridge.name}")
-        cursor.execute(f'''BEGIN TRANSACTION;
+        execute_query(f'''BEGIN TRANSACTION;
                        UPDATE public."cartridge" 
                        Set "Name" = '{cartridge.name}' 
                        WHERE "ID" = {cartridge.id};
@@ -110,7 +134,7 @@ def edit_cart(cartridge:Cartridge_edit):
         return status.HTTP_202_ACCEPTED
     except Exception as Error:
         logging.error(str(Error))
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         return{
             'error': str(Error),
             'status': status.HTTP_400_BAD_REQUEST
@@ -120,7 +144,7 @@ def edit_cart(cartridge:Cartridge_edit):
 def del_cart(id:int):
     try:
         logging.info(f"Начал удаление картриджа {id}")
-        cursor.execute(f'''BEGIN TRANSACTION; 
+        execute_query(f'''BEGIN TRANSACTION; 
                        DELETE FROM public."cartridge_model" where "id_cart" = {id};
                        DELETE FROM public."cartridge" WHERE "ID" = {id};
                        COMMIT;
@@ -129,7 +153,7 @@ def del_cart(id:int):
         return status.HTTP_202_ACCEPTED
     except Exception as Error:
         logging.error(str(Error))
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         return{
             'error': str(Error),
             'status': status.HTTP_400_BAD_REQUEST
@@ -139,18 +163,18 @@ def del_cart(id:int):
 def add_value(cart:Cartridge):
     try:
         logging.info(f"Начал изменение картриджа {cart.id} на {cart.value}")
-        cursor.execute(f'''BEGIN TRANSACTION; SELECT "Value" from public."cartridge" WHERE "ID" = {cart.id} ;''')
+        execute_query(f'''BEGIN TRANSACTION; SELECT "Value" from public."cartridge" WHERE "ID" = {cart.id} ;''')
         value = int(cursor.fetchone()[0])
         value+=cart.value
-        cursor.execute(f'''
+        execute_query(f'''
                        BEGIN TRANSACTION;
                        UPDATE public."cartridge" SET 
                        "Value" = {value}
                        WHERE "ID" = {cart.id};
                        COMMIT;''')
-        cursor.execute(f'''BEGIN TRANSACTION; SELECT "Name" from public."cartridge" where "ID" = {cart.id};''')
+        execute_query(f'''BEGIN TRANSACTION; SELECT "Name" from public."cartridge" where "ID" = {cart.id};''')
         model = str(cursor.fetchone()[0])
-        cursor.execute(f'''BEGIN TRANSACTION;
+        execute_query(f'''BEGIN TRANSACTION;
                             INSERT INTO public."cartridge_log" (\"Model\",\"Date\",\"Value\")
                             VALUES ('{model}','{datetime.now().strftime("%Y-%m-%d")}',{int(cart.value)});
                             COMMIT;''')
@@ -158,7 +182,7 @@ def add_value(cart:Cartridge):
         return status.HTTP_202_ACCEPTED
     except Exception as Error:
         logging.error(str(Error))
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         return{
             'error': str(Error),
             'status': status.HTTP_400_BAD_REQUEST
@@ -169,7 +193,7 @@ def add_value(cart:Cartridge):
 def get_all_cartridge():
     try:
         logging.info("Начал загружать список картриджей!")
-        cursor.execute(f'''BEGIN TRANSACTION;
+        execute_query(f'''BEGIN TRANSACTION;
                        SELECT * FROM public."cartridge" ORDER BY "ID" ASC;''')
         cart_base = cursor.fetchall()
         cart_list = []
@@ -187,7 +211,7 @@ def get_all_cartridge():
         return cart_list
     except Exception as error:
         logging.error(str(error))
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         return {
             "error": str(error),
             "status":status.HTTP_400_BAD_REQUEST
@@ -197,7 +221,7 @@ def get_all_cartridge():
 def upload_add(cart:Cartridge_upload):
     try:
         logging.info(f"Начал добавлять картридж на выгрузку!")
-        cursor.execute(f'''BEGIN TRANSACTION;
+        execute_query(f'''BEGIN TRANSACTION;
                             INSERT INTO public."catridge_exit" (\"model\",\"date\",\"adres\",\"serial\")
                             VALUES ('{cart.model}','{datetime.now().strftime("%Y-%m-%d")}','{cart.adres}','{cart.serial}');
                             COMMIT;''')
@@ -205,7 +229,7 @@ def upload_add(cart:Cartridge_upload):
         return status.HTTP_202_ACCEPTED
     except Exception as error:
         logging.error(str(error))
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         return {
             "error": str(error),
             "status":status.HTTP_400_BAD_REQUEST
@@ -218,7 +242,7 @@ def get_all_upload():
         datenow = date.today()
         while (datenow.isoweekday()!=2 and datenow.isoweekday()!=4):
             datenow = datenow + timedelta(days=1)
-        cursor.execute(f'''BEGIN TRANSACTION;
+        execute_query(f'''BEGIN TRANSACTION;
                        SELECT * from public."catridge_exit" ORDER BY id DESC;''')
         upload_base = cursor.fetchall()
         upload_list = []
@@ -240,7 +264,7 @@ def get_all_upload():
         return upload_list
     except Exception as error:
         logging.error(str(error))
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         return{
             "error": str(error),
             "status":status.HTTP_400_BAD_REQUEST
@@ -250,14 +274,14 @@ def get_all_upload():
 def del_for_id_upload(id:int):
     try:
         logging.info(f"Начал картридж по идентификатору {id} из выгрузки!")
-        cursor.execute(f'''BEGIN TRANSACTION;
+        execute_query(f'''BEGIN TRANSACTION;
                        DELETE FROM PUBLIC."catridge_exit" WHERE "id" = {id}; 
                        COMMIT;''')
         logging.info(f"Картридж по идентификатору {id} из выгрузки удален!")
         return status.HTTP_200_OK
     except Exception as error:
         logging.error(str(error))
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         return{
             "error": str(error),
             "status":status.HTTP_400_BAD_REQUEST
@@ -267,14 +291,14 @@ def del_for_id_upload(id:int):
 def del_all_upload():
     try:
         logging.info("Начал удалять все картриджи из выгрузки!")
-        cursor.execute(f'''BEGIN TRANSACTION;
+        execute_query(f'''BEGIN TRANSACTION;
                        DELETE FROM PUBLIC."catridge_exit"; 
                        COMMIT;''')
         logging.info("Список выгрузки пуст!")
         return status.HTTP_200_OK
     except Exception as error:
         logging.error(str(error))
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         return{
             "error": str(error),
             "status":status.HTTP_400_BAD_REQUEST
@@ -284,7 +308,7 @@ def del_all_upload():
 def create_model(model:Model_New):
     try:
         logging.info("Начал добавлять модель!")
-        cursor.execute(f'''BEGIN TRANSACTION;
+        execute_query(f'''BEGIN TRANSACTION;
                        INSERT INTO public."model" (\"name\")
                        VALUES ('{model.name}');
                        COMMIT;''')
@@ -292,7 +316,7 @@ def create_model(model:Model_New):
         return status.HTTP_200_OK
     except Exception as error:
         logging.error(str(error))
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
             'error_text':str(error)
@@ -302,7 +326,7 @@ def create_model(model:Model_New):
 def get_all_model():
     try:
         logging.info("Начал получать все модели по картриджу!")
-        cursor.execute(f'''BEGIN TRANSACTION;
+        execute_query(f'''BEGIN TRANSACTION;
                        SELECT * FROM public."model" ORDER BY "id" ASC;''')
         model_base = cursor.fetchall()
         model_list = []
@@ -320,7 +344,7 @@ def get_all_model():
         return model_list
     except Exception as error:
         logging.error(str(error))
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
             'error_text':str(error)
@@ -330,7 +354,7 @@ def get_all_model():
 def get_model_for_cart(id:int):
     try:
         logging.info("Начал получать модели по картриджу!")
-        cursor.execute(f'''BEGIN TRANSACTION;
+        execute_query(f'''BEGIN TRANSACTION;
                        SELECT id, id_model, (Select "name" from public."model" where "id" = "id_model") FROM public."cartridge_model" WHERE "id_cart" ={id} ORDER BY "id" ASC;''')
         model_base = cursor.fetchall()
         model_list = []
@@ -348,7 +372,7 @@ def get_model_for_cart(id:int):
         return model_list
     except Exception as error:
         logging.error(str(error))
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
             'error_text':str(error)
@@ -358,14 +382,14 @@ def get_model_for_cart(id:int):
 @app.put("/model/edit")
 def edit_model(model:Model_Edit):
     try:
-        cursor.execute(f'''BEGIN TRANSACTION;
+        execute_query(f'''BEGIN TRANSACTION;
                        UPDATE public."model" set \"name\" = '{model.name}'
                        WHERE "id" = {model.id};
                        COMMIT;''')
         return status.HTTP_200_OK
     except Exception as error:
         logging.error(str(error))
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
             'error_text':str(error)
@@ -374,14 +398,14 @@ def edit_model(model:Model_Edit):
 @app.delete("/model/delete")
 def delete_model(id:int):
     try:
-        cursor.execute(f'''BEGIN TRANSACTION;
+        execute_query(f'''BEGIN TRANSACTION;
                        DELETE FROM public."cartridge_model" where "id_model" = {id};
                        DELETE FROM public."model" where "id" = {id};
                        COMMIT;''')
         return status.HTTP_201_CREATED
     except Exception as error:
         logging.error(str(error))
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
             'error_text':str(error)
@@ -392,7 +416,7 @@ def link_model_cart(data:Model_link):
     try:
         logging.info("Начал связывать модели и картриджи!")
         for model_id in data.id_model:
-            cursor.execute(f'''BEGIN TRANSACTION;
+            execute_query(f'''BEGIN TRANSACTION;
                         insert into public."cartridge_model" (\"id_model\",\"id_cart\")
                         VALUES({int(model_id)},{data.id_cart});
                         COMMIT;''')
@@ -400,7 +424,7 @@ def link_model_cart(data:Model_link):
         return status.HTTP_201_CREATED
     except Exception as error:
         logging.error(str(error))
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
             'error_text':str(error)
@@ -410,7 +434,7 @@ def link_model_cart(data:Model_link):
 def link_model_cart(id:int):
     try:
         logging.info("Начал убирать связку!")
-        cursor.execute(f'''BEGIN TRANSACTION;
+        execute_query(f'''BEGIN TRANSACTION;
                        delete from public."cartridge_model"
                        where "id_cart" = {id};
                        COMMIT;''')
@@ -418,7 +442,7 @@ def link_model_cart(id:int):
         return status.HTTP_200_OK
     except Exception as error:
         logging.error(str(error))
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
             'error_text':str(error)
@@ -428,14 +452,14 @@ def link_model_cart(id:int):
 def add_requirement(requirement:Requirement):
     try:
         logging.info("Начал добавлять потребность!")
-        cursor.execute(f'''BEGIN TRANSACTION;
+        execute_query(f'''BEGIN TRANSACTION;
                        Insert into public."requirement" (\"id_model\",\"score\")
                        VALUES({requirement.id_model},{requirement.score});
                        COMMIT;''')
         logging.info("Потребность добавлена!")
     except Exception as error:
         logging.error(str(error))
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
             'error_text':str(error)
@@ -445,7 +469,7 @@ def add_requirement(requirement:Requirement):
 def get_all_requirement():
     try:
         logging.info("Получение всех потребностей начал!")
-        cursor.execute(f'''BEGIN TRANSACTION;
+        execute_query(f'''BEGIN TRANSACTION;
                        SELECT "id", (Select "name" from public."model" where "id" = "id_model") as name, "score"
                        from public."requirement"
                        ORDER BY "id" ASC;''')
@@ -465,7 +489,7 @@ def get_all_requirement():
         return list_json_requirement
     except Exception as error:
         logging.error(str(error))
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
             'error_text':str(error)
@@ -475,14 +499,14 @@ def get_all_requirement():
 def edit_requirement_for_id(requirement:Requirement_edit):
     try:
         logging.info("Изменение потребности начал!")
-        cursor.execute(f'''UPDATE public."requirement" SET \"score\" = {requirement.score}
+        execute_query(f'''UPDATE public."requirement" SET \"score\" = {requirement.score}
                        WHERE "id" = {requirement.id};
                        COMMIT;''')
         logging.info("Потребность изменена!")
         return status.HTTP_200_OK
     except Exception as error:
         logging.error(str(error))
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
             'error_text':str(error)
@@ -492,14 +516,14 @@ def edit_requirement_for_id(requirement:Requirement_edit):
 def delete_requirement_for_id(id:int):
     try:
         logging.info("Удаление потребность начал!")
-        cursor.execute(f'''BEGIN TRANSACTION;
+        execute_query(f'''BEGIN TRANSACTION;
                        DELETE FROM PUBLIC."requirement" WHERE "id" = {id};
                        COMMIT;''')
         logging.info("Потребность удалена!")
         return status.HTTP_200_OK
     except Exception as error:
         logging.error(str(error))
-        cursor.execute("ROLLBACK;")
+        execute_query("ROLLBACK;")
         return{
             'status': status.HTTP_400_BAD_REQUEST,
             'error_text':str(error)
